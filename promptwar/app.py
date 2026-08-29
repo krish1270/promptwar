@@ -108,7 +108,6 @@ components.html(cyberpunk_injection, height=0)
 st.title("⚡ A2B: AUTONOMOUS NEGOTIATION MATRIX")
 st.markdown("---")
 
-# Securely retrieve API key from Streamlit Secrets
 try:
     api_key = st.secrets["GEMINI_API_KEY"]
 except Exception:
@@ -141,11 +140,14 @@ start_button = st.button("🚀 INITIALIZE AUTONOMOUS SWARM PROTOCOL", use_contai
 # --- BACKEND LOGIC & AGENT SWARM EXECUTION ---
 if start_button:
     if not api_key:
-        st.error("⚠️ SYSTEM ERROR: GEMINI_API_KEY not found in Streamlit Secrets. Please check your app settings panel.")
+        st.error("⚠️ SYSTEM ERROR: GEMINI_API_KEY not found in Streamlit Secrets.")
     else:
         try:
             client = genai.Client(api_key=api_key)
-            st.session_state.log = []
+            if "log" not in st.session_state:
+                st.session_state.log = []
+            else:
+                st.session_state.log = []
             
             buyer_system = f"""You are an autonomous AI Buyer Agent executing a high-stakes B2B procurement contract.
 Assets: {quantity} units of {product}.
@@ -153,15 +155,15 @@ Target Price: ${buyer_budget}/unit.
 Delivery Window: {buyer_delivery}.
 Payment Terms Desired: {payment_terms}.
 Market Intelligence: {market_info}
-Instructions: Hard-negotiate price down toward your budget, ensure payment terms favor liquidity, and guard delivery timelines. Keep outputs under 3 sentences. End response with [COUNTER], [ACCEPTED], or [REJECTED]."""
+Instructions: Negotiate aggressively. Counter-offer price and delivery terms. Keep responses under 2 sentences. You MUST end your response with exactly one tag: [COUNTER], [ACCEPTED], or [REJECTED]."""
 
             seller_system = f"""You are an autonomous AI Seller Agent managing corporate sales margins.
 Assets: {quantity} units of {product}.
-Floor Limit: ${seller_floor}/unit (DO NOT DROP BELOW).
+Floor Limit: ${seller_floor}/unit (NEVER drop below this absolute floor).
 Standard Delivery: {seller_delivery}.
-Stipulated Warranty: {warranty_months} months. Penalty terms: {penalty_clause}.
+Warranty: {warranty_months} months. Penalty terms: {penalty_clause}.
 Market Intelligence: {market_info}
-Instructions: Protect your profit margins using market shortage data. Push back against aggressive payment terms. Keep outputs under 3 sentences. End response with [COUNTER], [ACCEPTED], or [REJECTED]."""
+Instructions: Defend your margins against low offers. Keep responses under 2 sentences. You MUST end your response with exactly one tag: [COUNTER], [ACCEPTED], or [REJECTED]."""
 
             buyer_config = types.GenerateContentConfig(system_instruction=buyer_system)
             seller_config = types.GenerateContentConfig(system_instruction=seller_system)
@@ -179,51 +181,60 @@ Instructions: Protect your profit margins using market shortage data. Push back 
                         else:
                             st.success(f"**🟢 [SELLER AGENT]:** {chat['text']}")
             
-            buyer_msg = f"Initiating procurement for {quantity}x {product}. Proposing initial entry at ${buyer_budget - 50}/unit with {payment_terms} and delivery {buyer_delivery}. [COUNTER]"
-            st.session_state.log.append({"role": "Buyer", "text": buyer_msg})
+            # Start loop cleanly
+            current_offer = f"We require {quantity} units of {product} at ${buyer_budget} per unit, with {payment_terms}. [COUNTER]"
+            st.session_state.log.append({"role": "Buyer", "text": current_offer})
             display_chat()
             
-            current_offer = buyer_msg
             status = "Negotiating"
-            
-            # Using gemini-3.7-flash stable endpoint
             ACTIVE_MODEL = "gemini-3.7-flash"
 
-            for round_num in range(1, 6):
-                time.sleep(1.2)
+            for round_num in range(1, 5):
+                time.sleep(1.0)
                 
-                seller_response_obj = client.models.generate_content(
-                    model=ACTIVE_MODEL,
-                    contents=f"Incoming Buyer Vector: {current_offer}\nEvaluate and Respond:",
-                    config=seller_config
-                )
-                seller_response = seller_response_obj.text
-                st.session_state.log.append({"role": "Seller", "text": seller_response})
+                # 1. Seller's Turn
+                with st.spinner(f"Matrix Round {round_num}: Seller Agent evaluating vector..."):
+                    seller_res = client.models.generate_content(
+                        model=ACTIVE_MODEL,
+                        contents=f"The buyer states: '{current_offer}'. Provide your counter-offer, acceptance, or rejection.",
+                        config=seller_config
+                    ).text.strip()
+                
+                # Ensure a tag exists
+                if not any(tag in seller_res.upper() for tag in ["[COUNTER]", "[ACCEPTED]", "[REJECTED]"]):
+                    seller_res += " [COUNTER]"
+
+                st.session_state.log.append({"role": "Seller", "text": seller_res})
                 display_chat()
                 
-                if "[ACCEPTED]" in seller_response.upper():
+                if "[ACCEPTED]" in seller_res.upper():
                     status = "Accepted"
                     break
-                elif "[REJECTED]" in seller_response.upper():
+                elif "[REJECTED]" in seller_res.upper():
                     status = "Rejected"
                     break
                     
-                time.sleep(1.2)
+                time.sleep(1.0)
                 
-                buyer_response_obj = client.models.generate_content(
-                    model=ACTIVE_MODEL,
-                    contents=f"Incoming Seller Vector: {seller_response}\nEvaluate and Respond:",
-                    config=buyer_config
-                )
-                buyer_response = buyer_response_obj.text
-                st.session_state.log.append({"role": "Buyer", "text": buyer_response})
+                # 2. Buyer's Turn
+                with st.spinner(f"Matrix Round {round_num}: Buyer Agent evaluating counter..."):
+                    buyer_res = client.models.generate_content(
+                        model=ACTIVE_MODEL,
+                        contents=f"The seller responded: '{seller_res}'. Provide your counter-offer, acceptance, or rejection.",
+                        config=buyer_config
+                    ).text.strip()
+                
+                if not any(tag in buyer_res.upper() for tag in ["[COUNTER]", "[ACCEPTED]", "[REJECTED]"]):
+                    buyer_res += " [COUNTER]"
+
+                st.session_state.log.append({"role": "Buyer", "text": buyer_res})
                 display_chat()
-                current_offer = buyer_response
+                current_offer = buyer_res
                 
-                if "[ACCEPTED]" in buyer_response.upper():
+                if "[ACCEPTED]" in buyer_res.upper():
                     status = "Accepted"
                     break
-                elif "[REJECTED]" in buyer_response.upper():
+                elif "[REJECTED]" in buyer_res.upper():
                     status = "Rejected"
                     break
 
@@ -232,24 +243,21 @@ Instructions: Protect your profit margins using market shortage data. Push back 
                 st.markdown("### 📝 EXECUTION SUCCESSFUL — SMART CONTRACT GENERATED")
                 transcript = "\n".join([f"{c['role']}: {c['text']}" for c in st.session_state.log])
                 
-                contract_prompt = f"""Generate a rigorous, binding electronic B2B smart contract detailing terms based on this transcript:
-Variables:
-- Product: {product} ({quantity} units)
-- Payment Terms: {payment_terms}
-- Warranty: {warranty_months} Months
-- Penalty Clause: {penalty_clause}
+                contract_prompt = f"""Generate a binding electronic B2B contract based on this negotiation transcript:
+Product: {product} ({quantity} units)
+Payment Terms: {payment_terms}
+Warranty: {warranty_months} Months
+Penalty Clause: {penalty_clause}
 
 Transcript:
 {transcript}"""
 
-                agreement_obj = client.models.generate_content(
+                agreement = client.models.generate_content(
                     model=ACTIVE_MODEL,
                     contents=contract_prompt
-                )
-                agreement = agreement_obj.text
+                ).text
                 
                 st.markdown(f"> **SECURE LEDGER RECORD:**\n\n{agreement}")
-                
                 st.download_button(
                     label="📥 DOWNLOAD ENCRYPTED CONTRACT MATRIX (.JSON)",
                     data=json.dumps({"status": status, "transcript": st.session_state.log, "contract": agreement}, indent=4),
@@ -257,11 +265,10 @@ Transcript:
                     mime="application/json"
                 )
                 st.balloons()
-                
             elif status == "Rejected":
-                st.error("❌ PROTOCOL TERMINATED: Agents broke parameters and abandoned negotiation channels.")
+                st.error("❌ PROTOCOL TERMINATED: Agents failed to reach consensus and walked away.")
             else:
-                st.warning("⚠️ PROTOCOL STALEMATE: Maximum turn cycles reached without structural consensus.")
+                st.warning("⚠️ PROTOCOL STALEMATE: Max rounds reached without agreement.")
 
         except Exception as e:
             st.error(f"❌ API TRANSMISSION ERROR: {str(e)}")
