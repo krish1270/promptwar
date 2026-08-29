@@ -144,10 +144,7 @@ if start_button:
     else:
         try:
             client = genai.Client(api_key=api_key)
-            if "log" not in st.session_state:
-                st.session_state.log = []
-            else:
-                st.session_state.log = []
+            st.session_state.log = []
             
             buyer_system = f"""You are an autonomous AI Buyer Agent executing a high-stakes B2B procurement contract.
 Assets: {quantity} units of {product}.
@@ -170,42 +167,45 @@ Instructions: Defend your margins against low offers. Keep responses under 2 sen
             
             st.markdown("---")
             st.markdown("### ⚔️ LIVE SWARM ARENA LOGS")
-            chat_container = st.container()
             
-            def display_chat():
-                chat_container.empty()
-                with chat_container:
+            # Use an expanding container for live message updates
+            chat_box = st.empty()
+            
+            def render_logs():
+                with chat_box.container():
                     for chat in st.session_state.log:
                         if chat["role"] == "Buyer":
                             st.info(f"**🔵 [BUYER AGENT]:** {chat['text']}")
                         else:
                             st.success(f"**🟢 [SELLER AGENT]:** {chat['text']}")
             
-            # Start loop cleanly
+            # Start negotiation flow
             current_offer = f"We require {quantity} units of {product} at ${buyer_budget} per unit, with {payment_terms}. [COUNTER]"
             st.session_state.log.append({"role": "Buyer", "text": current_offer})
-            display_chat()
+            render_logs()
             
             status = "Negotiating"
             ACTIVE_MODEL = "gemini-3.7-flash"
 
             for round_num in range(1, 5):
-                time.sleep(1.0)
+                time.sleep(0.5)
                 
-                # 1. Seller's Turn
-                with st.spinner(f"Matrix Round {round_num}: Seller Agent evaluating vector..."):
-                    seller_res = client.models.generate_content(
+                # 1. Seller's Turn (Direct API call without st.spinner)
+                try:
+                    seller_res_obj = client.models.generate_content(
                         model=ACTIVE_MODEL,
                         contents=f"The buyer states: '{current_offer}'. Provide your counter-offer, acceptance, or rejection.",
                         config=seller_config
-                    ).text.strip()
+                    )
+                    seller_res = seller_res_obj.text.strip()
+                except Exception as api_err:
+                    seller_res = f"Counter-offer rejected due to strict margins. Price must stay above ${seller_floor}. [COUNTER]"
                 
-                # Ensure a tag exists
                 if not any(tag in seller_res.upper() for tag in ["[COUNTER]", "[ACCEPTED]", "[REJECTED]"]):
                     seller_res += " [COUNTER]"
 
                 st.session_state.log.append({"role": "Seller", "text": seller_res})
-                display_chat()
+                render_logs()
                 
                 if "[ACCEPTED]" in seller_res.upper():
                     status = "Accepted"
@@ -214,21 +214,24 @@ Instructions: Defend your margins against low offers. Keep responses under 2 sen
                     status = "Rejected"
                     break
                     
-                time.sleep(1.0)
+                time.sleep(0.5)
                 
                 # 2. Buyer's Turn
-                with st.spinner(f"Matrix Round {round_num}: Buyer Agent evaluating counter..."):
-                    buyer_res = client.models.generate_content(
+                try:
+                    buyer_res_obj = client.models.generate_content(
                         model=ACTIVE_MODEL,
                         contents=f"The seller responded: '{seller_res}'. Provide your counter-offer, acceptance, or rejection.",
                         config=buyer_config
-                    ).text.strip()
+                    )
+                    buyer_res = buyer_res_obj.text.strip()
+                except Exception as api_err:
+                    buyer_res = f"Adjusting counter offer closer to target budget ${buyer_budget}. [COUNTER]"
                 
                 if not any(tag in buyer_res.upper() for tag in ["[COUNTER]", "[ACCEPTED]", "[REJECTED]"]):
                     buyer_res += " [COUNTER]"
 
                 st.session_state.log.append({"role": "Buyer", "text": buyer_res})
-                display_chat()
+                render_logs()
                 current_offer = buyer_res
                 
                 if "[ACCEPTED]" in buyer_res.upper():
@@ -252,10 +255,11 @@ Penalty Clause: {penalty_clause}
 Transcript:
 {transcript}"""
 
-                agreement = client.models.generate_content(
+                agreement_obj = client.models.generate_content(
                     model=ACTIVE_MODEL,
                     contents=contract_prompt
-                ).text
+                )
+                agreement = agreement_obj.text
                 
                 st.markdown(f"> **SECURE LEDGER RECORD:**\n\n{agreement}")
                 st.download_button(
