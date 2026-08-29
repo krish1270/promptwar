@@ -1,6 +1,5 @@
 import streamlit as st
 import streamlit.components.v1 as components
-import time
 import json
 from google import genai
 from google.genai import types
@@ -152,7 +151,7 @@ Target Price: ${buyer_budget}/unit.
 Delivery Window: {buyer_delivery}.
 Payment Terms Desired: {payment_terms}.
 Market Intelligence: {market_info}
-Instructions: Negotiate aggressively. Counter-offer price and delivery terms. Keep responses under 2 sentences. You MUST end your response with exactly one tag: [COUNTER], [ACCEPTED], or [REJECTED]."""
+Instructions: Negotiate price and terms aggressively. Keep responses under 2 sentences. You MUST end your response with exactly one action tag: [COUNTER], [ACCEPTED], or [REJECTED]."""
 
             seller_system = f"""You are an autonomous AI Seller Agent managing corporate sales margins.
 Assets: {quantity} units of {product}.
@@ -160,15 +159,22 @@ Floor Limit: ${seller_floor}/unit (NEVER drop below this absolute floor).
 Standard Delivery: {seller_delivery}.
 Warranty: {warranty_months} months. Penalty terms: {penalty_clause}.
 Market Intelligence: {market_info}
-Instructions: Defend your margins against low offers. Keep responses under 2 sentences. You MUST end your response with exactly one tag: [COUNTER], [ACCEPTED], or [REJECTED]."""
+Instructions: Defend your margins against low offers using market data. Keep responses under 2 sentences. You MUST end your response with exactly one action tag: [COUNTER], [ACCEPTED], or [REJECTED]."""
 
-            buyer_config = types.GenerateContentConfig(system_instruction=buyer_system)
-            seller_config = types.GenerateContentConfig(system_instruction=seller_system)
+            # Initialize Persistent Native Chats (Ensures context flows seamlessly)
+            ACTIVE_MODEL = "gemini-3.7-flash"
+            
+            buyer_chat = client.chats.create(
+                model=ACTIVE_MODEL,
+                config=types.GenerateContentConfig(system_instruction=buyer_system)
+            )
+            seller_chat = client.chats.create(
+                model=ACTIVE_MODEL,
+                config=types.GenerateContentConfig(system_instruction=seller_system)
+            )
             
             st.markdown("---")
             st.markdown("### ⚔️ LIVE SWARM ARENA LOGS")
-            
-            # Use an expanding container for live message updates
             chat_box = st.empty()
             
             def render_logs():
@@ -179,27 +185,20 @@ Instructions: Defend your margins against low offers. Keep responses under 2 sen
                         else:
                             st.success(f"**🟢 [SELLER AGENT]:** {chat['text']}")
             
-            # Start negotiation flow
-            current_offer = f"We require {quantity} units of {product} at ${buyer_budget} per unit, with {payment_terms}. [COUNTER]"
-            st.session_state.log.append({"role": "Buyer", "text": current_offer})
+            # Step 1: Buyer kicks off the negotiation
+            initial_message = f"We require {quantity} units of {product} at an entry target of ${buyer_budget} per unit with {payment_terms}. What is your counter? [COUNTER]"
+            st.session_state.log.append({"role": "Buyer", "text": initial_message})
             render_logs()
             
+            current_message = initial_message
             status = "Negotiating"
-            ACTIVE_MODEL = "gemini-3.7-flash"
 
+            # Step 2: Multi-round back-and-forth loop using native chat history
             for round_num in range(1, 5):
-                time.sleep(0.5)
                 
-                # 1. Seller's Turn (Direct API call without st.spinner)
-                try:
-                    seller_res_obj = client.models.generate_content(
-                        model=ACTIVE_MODEL,
-                        contents=f"The buyer states: '{current_offer}'. Provide your counter-offer, acceptance, or rejection.",
-                        config=seller_config
-                    )
-                    seller_res = seller_res_obj.text.strip()
-                except Exception as api_err:
-                    seller_res = f"Counter-offer rejected due to strict margins. Price must stay above ${seller_floor}. [COUNTER]"
+                # --- SELLER TURN ---
+                seller_res_obj = seller_chat.send_message(current_message)
+                seller_res = seller_res_obj.text.strip()
                 
                 if not any(tag in seller_res.upper() for tag in ["[COUNTER]", "[ACCEPTED]", "[REJECTED]"]):
                     seller_res += " [COUNTER]"
@@ -213,26 +212,17 @@ Instructions: Defend your margins against low offers. Keep responses under 2 sen
                 elif "[REJECTED]" in seller_res.upper():
                     status = "Rejected"
                     break
-                    
-                time.sleep(0.5)
                 
-                # 2. Buyer's Turn
-                try:
-                    buyer_res_obj = client.models.generate_content(
-                        model=ACTIVE_MODEL,
-                        contents=f"The seller responded: '{seller_res}'. Provide your counter-offer, acceptance, or rejection.",
-                        config=buyer_config
-                    )
-                    buyer_res = buyer_res_obj.text.strip()
-                except Exception as api_err:
-                    buyer_res = f"Adjusting counter offer closer to target budget ${buyer_budget}. [COUNTER]"
+                # --- BUYER TURN ---
+                buyer_res_obj = buyer_chat.send_message(seller_res)
+                buyer_res = buyer_res_obj.text.strip()
                 
                 if not any(tag in buyer_res.upper() for tag in ["[COUNTER]", "[ACCEPTED]", "[REJECTED]"]):
                     buyer_res += " [COUNTER]"
 
                 st.session_state.log.append({"role": "Buyer", "text": buyer_res})
                 render_logs()
-                current_offer = buyer_res
+                current_message = buyer_res
                 
                 if "[ACCEPTED]" in buyer_res.upper():
                     status = "Accepted"
@@ -272,7 +262,7 @@ Transcript:
             elif status == "Rejected":
                 st.error("❌ PROTOCOL TERMINATED: Agents failed to reach consensus and walked away.")
             else:
-                st.warning("⚠️ PROTOCOL STALEMATE: Max rounds reached without agreement.")
+                st.warning("⚠️ PROTOCOL STALEMATE: Max rounds reached without formal agreement.")
 
         except Exception as e:
             st.error(f"❌ API TRANSMISSION ERROR: {str(e)}")
