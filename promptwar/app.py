@@ -108,7 +108,7 @@ components.html(cyberpunk_injection, height=0)
 st.title("⚡ A2B: AUTONOMOUS NEGOTIATION MATRIX")
 st.markdown("---")
 
-# Securely pull API key from Streamlit Secrets (No UI input box)
+# Securely retrieve API key from Streamlit Secrets
 try:
     api_key = st.secrets["GEMINI_API_KEY"]
 except Exception:
@@ -141,12 +141,13 @@ start_button = st.button("🚀 INITIALIZE AUTONOMOUS SWARM PROTOCOL", use_contai
 # --- BACKEND LOGIC & AGENT SWARM EXECUTION ---
 if start_button:
     if not api_key:
-        st.error("⚠️ SYSTEM ERROR: GEMINI_API_KEY not found in Streamlit Secrets. Please check your app settings.")
+        st.error("⚠️ SYSTEM ERROR: GEMINI_API_KEY not found in Streamlit Secrets. Please check your app settings panel.")
     else:
-        client = genai.Client(api_key=api_key)
-        st.session_state.log = []
-        
-        buyer_system = f"""You are an autonomous AI Buyer Agent executing a high-stakes B2B procurement contract.
+        try:
+            client = genai.Client(api_key=api_key)
+            st.session_state.log = []
+            
+            buyer_system = f"""You are an autonomous AI Buyer Agent executing a high-stakes B2B procurement contract.
 Assets: {quantity} units of {product}.
 Target Price: ${buyer_budget}/unit.
 Delivery Window: {buyer_delivery}.
@@ -154,7 +155,7 @@ Payment Terms Desired: {payment_terms}.
 Market Intelligence: {market_info}
 Instructions: Hard-negotiate price down toward your budget, ensure payment terms favor liquidity, and guard delivery timelines. Keep outputs under 3 sentences. End response with [COUNTER], [ACCEPTED], or [REJECTED]."""
 
-        seller_system = f"""You are an autonomous AI Seller Agent managing corporate sales margins.
+            seller_system = f"""You are an autonomous AI Seller Agent managing corporate sales margins.
 Assets: {quantity} units of {product}.
 Floor Limit: ${seller_floor}/unit (DO NOT DROP BELOW).
 Standard Delivery: {seller_delivery}.
@@ -162,71 +163,76 @@ Stipulated Warranty: {warranty_months} months. Penalty terms: {penalty_clause}.
 Market Intelligence: {market_info}
 Instructions: Protect your profit margins using market shortage data. Push back against aggressive payment terms. Keep outputs under 3 sentences. End response with [COUNTER], [ACCEPTED], or [REJECTED]."""
 
-        buyer_config = types.GenerateContentConfig(system_instruction=buyer_system)
-        seller_config = types.GenerateContentConfig(system_instruction=seller_system)
-        
-        st.markdown("---")
-        st.markdown("### ⚔️ LIVE SWARM ARENA LOGS")
-        chat_container = st.container()
-        
-        def display_chat():
-            chat_container.empty()
-            with chat_container:
-                for chat in st.session_state.log:
-                    if chat["role"] == "Buyer":
-                        st.info(f"**🔵 [BUYER AGENT]:** {chat['text']}")
-                    else:
-                        st.success(f"**🟢 [SELLER AGENT]:** {chat['text']}")
-        
-        buyer_msg = f"Initiating procurement for {quantity}x {product}. Proposing initial entry at ${buyer_budget - 50}/unit with {payment_terms} and delivery {buyer_delivery}. [COUNTER]"
-        st.session_state.log.append({"role": "Buyer", "text": buyer_msg})
-        display_chat()
-        
-        current_offer = buyer_msg
-        status = "Negotiating"
-        
-        for round_num in range(1, 6):
-            time.sleep(1.2)
+            buyer_config = types.GenerateContentConfig(system_instruction=buyer_system)
+            seller_config = types.GenerateContentConfig(system_instruction=seller_system)
             
-            seller_response = client.models.generate_content(
-                model='gemini-3.5-flash',
-                contents=f"Incoming Buyer Vector: {current_offer}\nEvaluate and Respond:",
-                config=seller_config
-            ).text
-            st.session_state.log.append({"role": "Seller", "text": seller_response})
+            st.markdown("---")
+            st.markdown("### ⚔️ LIVE SWARM ARENA LOGS")
+            chat_container = st.container()
+            
+            def display_chat():
+                chat_container.empty()
+                with chat_container:
+                    for chat in st.session_state.log:
+                        if chat["role"] == "Buyer":
+                            st.info(f"**🔵 [BUYER AGENT]:** {chat['text']}")
+                        else:
+                            st.success(f"**🟢 [SELLER AGENT]:** {chat['text']}")
+            
+            buyer_msg = f"Initiating procurement for {quantity}x {product}. Proposing initial entry at ${buyer_budget - 50}/unit with {payment_terms} and delivery {buyer_delivery}. [COUNTER]"
+            st.session_state.log.append({"role": "Buyer", "text": buyer_msg})
             display_chat()
             
-            if "[ACCEPTED]" in seller_response.upper():
-                status = "Accepted"
-                break
-            elif "[REJECTED]" in seller_response.upper():
-                status = "Rejected"
-                break
-                
-            time.sleep(1.2)
+            current_offer = buyer_msg
+            status = "Negotiating"
             
-            buyer_response = client.models.generate_content(
-                model='gemini-3.5-flash',
-                contents=f"Incoming Seller Vector: {seller_response}\nEvaluate and Respond:",
-                config=buyer_config
-            ).text
-            st.session_state.log.append({"role": "Buyer", "text": buyer_response})
-            display_chat()
-            current_offer = buyer_response
-            
-            if "[ACCEPTED]" in buyer_response.upper():
-                status = "Accepted"
-                break
-            elif "[REJECTED]" in buyer_response.upper():
-                status = "Rejected"
-                break
+            # Using gemini-3.7-flash stable endpoint
+            ACTIVE_MODEL = "gemini-3.7-flash"
 
-        st.markdown("---")
-        if status == "Accepted":
-            st.markdown("### 📝 EXECUTION SUCCESSFUL — SMART CONTRACT GENERATED")
-            transcript = "\n".join([f"{c['role']}: {c['text']}" for c in st.session_state.log])
-            
-            contract_prompt = f"""Generate a rigorous, binding electronic B2B smart contract detailing terms based on this transcript:
+            for round_num in range(1, 6):
+                time.sleep(1.2)
+                
+                seller_response_obj = client.models.generate_content(
+                    model=ACTIVE_MODEL,
+                    contents=f"Incoming Buyer Vector: {current_offer}\nEvaluate and Respond:",
+                    config=seller_config
+                )
+                seller_response = seller_response_obj.text
+                st.session_state.log.append({"role": "Seller", "text": seller_response})
+                display_chat()
+                
+                if "[ACCEPTED]" in seller_response.upper():
+                    status = "Accepted"
+                    break
+                elif "[REJECTED]" in seller_response.upper():
+                    status = "Rejected"
+                    break
+                    
+                time.sleep(1.2)
+                
+                buyer_response_obj = client.models.generate_content(
+                    model=ACTIVE_MODEL,
+                    contents=f"Incoming Seller Vector: {seller_response}\nEvaluate and Respond:",
+                    config=buyer_config
+                )
+                buyer_response = buyer_response_obj.text
+                st.session_state.log.append({"role": "Buyer", "text": buyer_response})
+                display_chat()
+                current_offer = buyer_response
+                
+                if "[ACCEPTED]" in buyer_response.upper():
+                    status = "Accepted"
+                    break
+                elif "[REJECTED]" in buyer_response.upper():
+                    status = "Rejected"
+                    break
+
+            st.markdown("---")
+            if status == "Accepted":
+                st.markdown("### 📝 EXECUTION SUCCESSFUL — SMART CONTRACT GENERATED")
+                transcript = "\n".join([f"{c['role']}: {c['text']}" for c in st.session_state.log])
+                
+                contract_prompt = f"""Generate a rigorous, binding electronic B2B smart contract detailing terms based on this transcript:
 Variables:
 - Product: {product} ({quantity} units)
 - Payment Terms: {payment_terms}
@@ -236,22 +242,26 @@ Variables:
 Transcript:
 {transcript}"""
 
-            agreement = client.models.generate_content(
-                model='gemini-3.5-flash',
-                contents=contract_prompt
-            ).text
-            
-            st.markdown(f"> **SECURE LEDGER RECORD:**\n\n{agreement}")
-            
-            st.download_button(
-                label="📥 DOWNLOAD ENCRYPTED CONTRACT MATRIX (.JSON)",
-                data=json.dumps({"status": status, "transcript": st.session_state.log, "contract": agreement}, indent=4),
-                file_name="negotiation_matrix_contract.json",
-                mime="application/json"
-            )
-            st.balloons()
-            
-        elif status == "Rejected":
-            st.error("❌ PROTOCOL TERMINATED: Agents broke parameters and abandoned negotiation channels.")
-        else:
-            st.warning("⚠️ PROTOCOL STALEMATE: Maximum turn cycles reached without structural consensus.")
+                agreement_obj = client.models.generate_content(
+                    model=ACTIVE_MODEL,
+                    contents=contract_prompt
+                )
+                agreement = agreement_obj.text
+                
+                st.markdown(f"> **SECURE LEDGER RECORD:**\n\n{agreement}")
+                
+                st.download_button(
+                    label="📥 DOWNLOAD ENCRYPTED CONTRACT MATRIX (.JSON)",
+                    data=json.dumps({"status": status, "transcript": st.session_state.log, "contract": agreement}, indent=4),
+                    file_name="negotiation_matrix_contract.json",
+                    mime="application/json"
+                )
+                st.balloons()
+                
+            elif status == "Rejected":
+                st.error("❌ PROTOCOL TERMINATED: Agents broke parameters and abandoned negotiation channels.")
+            else:
+                st.warning("⚠️ PROTOCOL STALEMATE: Maximum turn cycles reached without structural consensus.")
+
+        except Exception as e:
+            st.error(f"❌ API TRANSMISSION ERROR: {str(e)}")
