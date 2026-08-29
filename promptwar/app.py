@@ -74,8 +74,6 @@ h1, h2, h3 {
     box-shadow: 0 0 30px #ff0055, 0 0 50px #00ffcc;
     transform: skewX(-5deg);
 }
-
-/* Cybernetic Cursor */
 </style>
 
 <script>
@@ -150,7 +148,6 @@ if start_button:
         client = genai.Client(api_key=api_key_input)
         st.session_state.log = []
         
-        # Enhanced System Prompts incorporating new variables
         buyer_system = f"""You are an autonomous AI Buyer Agent executing a high-stakes B2B procurement contract.
 Assets: {quantity} units of {product}.
 Target Price: ${buyer_budget}/unit.
@@ -183,7 +180,6 @@ Instructions: Protect your profit margins using market shortage data. Push back 
                     else:
                         st.success(f"**🟢 [SELLER AGENT]:** {chat['text']}")
         
-        # Opening move
         buyer_msg = f"Initiating procurement for {quantity}x {product}. Proposing initial entry at ${buyer_budget - 50}/unit with {payment_terms} and delivery {buyer_delivery}. [COUNTER]"
         st.session_state.log.append({"role": "Buyer", "text": buyer_msg})
         display_chat()
@@ -191,11 +187,9 @@ Instructions: Protect your profit margins using market shortage data. Push back 
         current_offer = buyer_msg
         status = "Negotiating"
         
-        # Multi-round matrix negotiation loop (up to 5 rounds)
         for round_num in range(1, 6):
             time.sleep(1.2)
             
-            # Seller Response
             seller_response = client.models.generate_content(
                 model='gemini-3.5-flash',
                 contents=f"Incoming Buyer Vector: {current_offer}\nEvaluate and Respond:",
@@ -213,7 +207,6 @@ Instructions: Protect your profit margins using market shortage data. Push back 
                 
             time.sleep(1.2)
             
-            # Buyer Response
             buyer_response = client.models.generate_content(
                 model='gemini-3.5-flash',
                 contents=f"Incoming Seller Vector: {seller_response}\nEvaluate and Respond:",
@@ -230,7 +223,6 @@ Instructions: Protect your profit margins using market shortage data. Push back 
                 status = "Rejected"
                 break
 
-        # Final Contract & Quality of Life Export Panel
         st.markdown("---")
         if status == "Accepted":
             st.markdown("### 📝 EXECUTION SUCCESSFUL — SMART CONTRACT GENERATED")
@@ -253,7 +245,6 @@ Transcript:
             
             st.markdown(f"> **SECURE LEDGER RECORD:**\n\n{agreement}")
             
-            # QoL Feature: Download transcript/contract as JSON/TXT
             st.download_button(
                 label="📥 DOWNLOAD ENCRYPTED CONTRACT MATRIX (.JSON)",
                 data=json.dumps({"status": status, "transcript": st.session_state.log, "contract": agreement}, indent=4),
@@ -266,7 +257,3 @@ Transcript:
             st.error("❌ PROTOCOL TERMINATED: Agents broke parameters and abandoned negotiation channels.")
         else:
             st.warning("⚠️ PROTOCOL STALEMATE: Maximum turn cycles reached without structural consensus.")
-
-[Cyberpunk UI Website Design Inspiration](https://www.youtube.com/watch?v=KhSDaVDF3YA)
-This video explores cutting-edge cyberpunk and futuristic UI/UX concepts to inspire advanced web design architectures.
-http://googleusercontent.com/youtube_content/1
