@@ -11,17 +11,14 @@ st.set_page_config(page_title="A2A B2B Cyber-Swarm", layout="wide")
 # --- AUTHENTIC CYBERPUNK UI OVERHAUL (CSS & JS) ---
 cyberpunk_injection = """
 <style>
-/* Import Sci-Fi Font */
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap');
 
-/* Global Cyberpunk Theme & Scanlines */
 html, body, [class*="css"] {
     font-family: 'Share Tech Mono', monospace !important;
     background-color: #030308 !important;
     color: #00ffcc !important;
 }
 
-/* CRT Scanline Overlay Effect */
 body::after {
     content: " ";
     display: block;
@@ -33,7 +30,6 @@ body::after {
     pointer-events: none;
 }
 
-/* Neon Glowing Headings */
 h1, h2, h3 {
     font-family: 'Orbitron', sans-serif !important;
     text-transform: uppercase;
@@ -42,7 +38,6 @@ h1, h2, h3 {
     text-shadow: 0 0 10px rgba(0, 255, 204, 0.6), 0 0 20px rgba(0, 255, 204, 0.3);
 }
 
-/* Cybernetic Inputs & Textareas */
 .stTextInput input, .stNumberInput input, .stTextArea textarea, .stSelectbox div[data-baseweb="select"] {
     background-color: #080b12 !important;
     border: 1px solid #00ffcc !important;
@@ -56,7 +51,6 @@ h1, h2, h3 {
     box-shadow: inset 0 0 15px rgba(255, 0, 85, 0.3), 0 0 15px #ff0055 !important;
 }
 
-/* Hard-Edged Glitchy Start Button */
 .stButton > button {
     background: #030308 !important;
     border: 2px solid #ff0055 !important;
@@ -114,9 +108,13 @@ components.html(cyberpunk_injection, height=0)
 st.title("⚡ A2B: AUTONOMOUS NEGOTIATION MATRIX")
 st.markdown("---")
 
-api_key_input = st.text_input("🔑 ENTER GEMINI API KEY [SECURE STORAGE]:", type="password")
+# Securely pull API key from Streamlit Secrets (No UI input box)
+try:
+    api_key = st.secrets["GEMINI_API_KEY"]
+except Exception:
+    api_key = None
 
-# --- EXPANDED NEGOTIATION PARAMETERS (VARIABLES) ---
+# --- EXPANDED NEGOTIATION PARAMETERS ---
 st.markdown("### 📊 MATRIX PARAMETERS & CONSTRAINTS")
 
 col1, col2 = st.columns(2)
@@ -142,10 +140,10 @@ start_button = st.button("🚀 INITIALIZE AUTONOMOUS SWARM PROTOCOL", use_contai
 
 # --- BACKEND LOGIC & AGENT SWARM EXECUTION ---
 if start_button:
-    if not api_key_input:
-        st.error("⚠️ ACCESS DENIED: Please input a valid API Key above.")
+    if not api_key:
+        st.error("⚠️ SYSTEM ERROR: GEMINI_API_KEY not found in Streamlit Secrets. Please check your app settings.")
     else:
-        client = genai.Client(api_key=api_key_input)
+        client = genai.Client(api_key=api_key)
         st.session_state.log = []
         
         buyer_system = f"""You are an autonomous AI Buyer Agent executing a high-stakes B2B procurement contract.
